@@ -1,0 +1,11 @@
+{
+  "model": "@cf/moonshotai/kimi-k2.6",
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is Cloudflare?"
+      }
+    ]
+  }
+}

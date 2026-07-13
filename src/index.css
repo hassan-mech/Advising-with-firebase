@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "./print.css";
+
+/* ---------------------------------------------------------------------------
+   Global theme overrides.
+   The app was designed dark-first (slate-950 backgrounds with slate-100
+   text everywhere). Rather than touch every component file, we override the
+   most-used surface classes when `<html>` carries `theme-light`. This is
+   pragmatic — it doesn't change the layout, only the colours.
+
+   CSS variables (`--theme-bg`, `--theme-surface`, etc.) drive the most
+   common surfaces and are also consumed by the print trees that need
+   to honour the active theme.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --theme-bg: rgb(2 6 23);          /* slate-950 */
+  --theme-bg-translucent: rgba(2, 6, 23, 0.95);
+  --theme-surface: rgb(15 23 42);   /* slate-900 */
+  --theme-surface-2: rgb(30 41 59); /* slate-800 */
+  --theme-surface-3: rgb(51 65 85); /* slate-700 */
+  --theme-border: rgba(255, 255, 255, 0.1);
+  --theme-border-strong: rgba(255, 255, 255, 0.15);
+  --theme-text: rgb(241 245 249);   /* slate-100 */
+  --theme-text-muted: rgb(203 213 225); /* slate-300 */
+  --theme-text-dim: rgb(148 163 184);   /* slate-400 */
+  --theme-text-faint: rgb(100 116 139); /* slate-500 */
+  --theme-hover: rgba(255, 255, 255, 0.1);
+  --theme-hover-soft: rgba(255, 255, 255, 0.05);
+}
+
+:root.theme-light {
+  --theme-bg: rgb(248 250 252);     /* slate-50 */
+  --theme-bg-translucent: rgba(248, 250, 252, 0.95);
+  --theme-surface: rgb(255 255 255);
+  --theme-surface-2: rgb(241 245 249);
+  --theme-surface-3: rgb(226 232 240);
+  --theme-border: rgba(15, 23, 42, 0.1);
+  --theme-border-strong: rgba(15, 23, 42, 0.15);
+  --theme-text: rgb(15 23 42);      /* slate-900 */
+  --theme-text-muted: rgb(51 65 85); /* slate-700 */
+  --theme-text-dim: rgb(100 116 139);
+  --theme-text-faint: rgb(148 163 184);
+  --theme-hover: rgba(15, 23, 42, 0.06);
+  --theme-hover-soft: rgba(15, 23, 42, 0.03);
+}
+
+/* Body / html — full-viewport background. */
+html.theme-light body { background: var(--theme-bg) !important; color: var(--theme-text) !important; }
+html.theme-dark body  { background: var(--theme-bg) !important; color: var(--theme-text) !important; }
+
+/* Surfaces. */
+html.theme-light .bg-slate-950          { background-color: var(--theme-bg) !important; }
+html.theme-light .bg-slate-950\/95      { background-color: var(--theme-bg-translucent) !important; }
+html.theme-light .bg-slate-950\/80      { background-color: rgba(248, 250, 252, 0.8) !important; }
+html.theme-light .bg-slate-950\/60      { background-color: rgba(248, 250, 252, 0.6) !important; }
+html.theme-light .bg-slate-900          { background-color: var(--theme-surface) !important; }
+html.theme-light .bg-slate-900\/80      { background-color: rgba(255, 255, 255, 0.8) !important; }
+html.theme-light .bg-slate-900\/60      { background-color: rgba(255, 255, 255, 0.6) !important; }
+html.theme-light .bg-slate-900\/40      { background-color: rgba(255, 255, 255, 0.4) !important; }
+html.theme-light .bg-slate-900\/30      { background-color: rgba(255, 255, 255, 0.3) !important; }
+html.theme-light .bg-white\/5           { background-color: var(--theme-hover-soft) !important; }
+html.theme-light .bg-white\/10          { background-color: var(--theme-hover) !important; }
+html.theme-light .bg-white\/15          { background-color: rgba(15, 23, 42, 0.08) !important; }
+
+/* Borders. */
+html.theme-light .border-white\/5       { border-color: rgba(15, 23, 42, 0.05) !important; }
+html.theme-light .border-white\/10      { border-color: var(--theme-border) !important; }
+html.theme-light .border-white\/15      { border-color: var(--theme-border-strong) !important; }
+html.theme-light .border-white\/20      { border-color: rgba(15, 23, 42, 0.2) !important; }
+html.theme-light .divide-white\/10 > *  { border-color: var(--theme-border) !important; }
+
+/* Text. */
+html.theme-light .text-slate-100        { color: var(--theme-text) !important; }
+html.theme-light .text-slate-200        { color: rgb(30 41 59) !important; }
+html.theme-light .text-slate-300        { color: var(--theme-text-muted) !important; }
+/* Plain `text-white` (the literal `#fff`) was missing an override,
+   so on light mode it stayed invisible against the white surface
+   (used on header buttons, modal titles, advising combobox labels,
+   error close button, etc.). Flip it to the slate-900 theme text. */
+html.theme-light .text-white            { color: var(--theme-text) !important; }
+html.theme-light .text-slate-400        { color: var(--theme-text-dim) !important; }
+html.theme-light .text-slate-500        { color: var(--theme-text-faint) !important; }
+html.theme-light .text-slate-600        { color: rgb(71 85 105) !important; }
+html.theme-light .placeholder\:text-slate-600::placeholder { color: rgb(148 163 184) !important; }
+
+/* Extra palette flips for new components. */
+html.theme-light .text-blue-400        { color: rgb(37 99 235) !important; }    /* blue-600 */
+html.theme-light .text-rose-400        { color: rgb(190 18 60) !important; }   /* rose-700 */
+
+/* Pale status colours (-100/-200 shades) are designed for dark surfaces
+   (slate-950 with a 15% status tint). On a light background they're
+   unreadable — flip them to the corresponding 700/800 shade which
+   reads well on white. The original Tailwind classes stay in the JSX;
+   this rule overrides them when the page is in light mode. */
+html.theme-light .text-blue-100,
+html.theme-light .text-blue-200,
+html.theme-light .text-blue-300      { color: rgb(29 78 216) !important; }    /* blue-700 */
+html.theme-light .text-cyan-100,
+html.theme-light .text-cyan-200,
+html.theme-light .text-cyan-300      { color: rgb(14 116 144) !important; }   /* cyan-700 */
+html.theme-light .text-sky-100,
+html.theme-light .text-sky-200,
+html.theme-light .text-sky-300       { color: rgb(3 105 161) !important; }    /* sky-700 */
+html.theme-light .text-emerald-100,
+html.theme-light .text-emerald-200,
+html.theme-light .text-emerald-300   { color: rgb(4 120 87) !important; }     /* emerald-700 */
+html.theme-light .text-amber-100,
+html.theme-light .text-amber-200,
+html.theme-light .text-amber-300     { color: rgb(180 83 9) !important; }     /* amber-700 */
+html.theme-light .text-rose-100,
+html.theme-light .text-rose-200,
+html.theme-light .text-rose-300      { color: rgb(190 18 60) !important; }    /* rose-700 */
+html.theme-light .text-pink-100,
+html.theme-light .text-pink-200,
+html.theme-light .text-pink-300      { color: rgb(157 23 77) !important; }    /* pink-700 */
+html.theme-light .text-fuchsia-100,
+html.theme-light .text-fuchsia-200,
+html.theme-light .text-fuchsia-300   { color: rgb(126 34 206) !important; }   /* fuchsia-700 */
+html.theme-light .text-violet-100,
+html.theme-light .text-violet-200,
+html.theme-light .text-violet-300    { color: rgb(109 40 217) !important; }   /* violet-700 */
+html.theme-light .text-purple-100,
+html.theme-light .text-purple-200,
+html.theme-light .text-purple-300    { color: rgb(107 33 168) !important; }   /* purple-700 */
+html.theme-light .text-indigo-100,
+html.theme-light .text-indigo-200,
+html.theme-light .text-indigo-300    { color: rgb(67 56 202) !important; }    /* indigo-700 */
+html.theme-light .text-teal-100,
+html.theme-light .text-teal-200,
+html.theme-light .text-teal-300      { color: rgb(15 118 110) !important; }   /* teal-700 */
+html.theme-light .text-yellow-100,
+html.theme-light .text-yellow-200,
+html.theme-light .text-yellow-300    { color: rgb(161 98 7) !important; }     /* yellow-700 */
+html.theme-light .text-lime-100,
+html.theme-light .text-lime-200,
+html.theme-light .text-lime-300      { color: rgb(77 124 15) !important; }    /* lime-700 */
+html.theme-light .text-orange-100,
+html.theme-light .text-orange-200,
+html.theme-light .text-orange-300    { color: rgb(194 65 12) !important; }    /* orange-700 */
+html.theme-light .text-green-100,
+html.theme-light .text-green-200,
+html.theme-light .text-green-300     { color: rgb(21 128 61) !important; }    /* green-700 */
+html.theme-light .hover\:text-rose-200:hover   { color: rgb(190 18 60) !important; }
+html.theme-light .hover\:text-fuchsia-100:hover{ color: rgb(126 34 206) !important; }
+
+/* Status card backgrounds — pale tints of the status colour. On dark
+   they sit on slate-950; on light they need a bit more saturation to
+   stay visible against the white surface. We bump /15 → ~25%. */
+html.theme-light .bg-emerald-500\/15 { background-color: rgba(16, 185, 129, 0.22) !important; }
+html.theme-light .bg-rose-500\/15,
+html.theme-light .bg-rose-600\/15    { background-color: rgba(225, 29, 72, 0.22) !important; }
+html.theme-light .bg-pink-500\/15    { background-color: rgba(236, 72, 153, 0.22) !important; }
+html.theme-light .bg-amber-500\/15   { background-color: rgba(245, 158, 11, 0.25) !important; }
+html.theme-light .bg-blue-500\/15    { background-color: rgba(59, 130, 246, 0.22) !important; }
+html.theme-light .bg-fuchsia-500\/15,
+html.theme-light .bg-fuchsia-500\/30 { background-color: rgba(217, 70, 239, 0.25) !important; }
+html.theme-light .bg-violet-500\/15  { background-color: rgba(139, 92, 246, 0.22) !important; }
+html.theme-light .bg-sky-500\/15     { background-color: rgba(14, 165, 233, 0.22) !important; }
+html.theme-light .bg-cyan-500\/15    { background-color: rgba(6, 182, 212, 0.22) !important; }
+
+/* Button/input surfaces — semi-transparent overlays that flip to
+   subtle dark tints on light backgrounds. */
+html.theme-light .bg-black\/30       { background-color: rgba(15, 23, 42, 0.04) !important; }
+html.theme-light .bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.22) !important; }
+html.theme-light .bg-cyan-500\/20    { background-color: rgba(6, 182, 212, 0.22) !important; }
+html.theme-light .hover\:bg-emerald-500\/30:hover { background-color: rgba(16, 185, 129, 0.32) !important; }
+html.theme-light .hover\:bg-cyan-500\/30:hover    { background-color: rgba(6, 182, 212, 0.32) !important; }
+html.theme-light .hover\:bg-blue-500\/25:hover    { background-color: rgba(59, 130, 246, 0.30) !important; }
+
+/* Status card borders — they stay the same colour but the /40 alpha
+   needs a touch more to read on white. */
+html.theme-light .border-emerald-500\/40 { border-color: rgba(16, 185, 129, 0.55) !important; }
+html.theme-light .border-rose-500\/40,
+html.theme-light .border-rose-600\/60    { border-color: rgba(225, 29, 72, 0.55) !important; }
+html.theme-light .border-pink-500\/50    { border-color: rgba(236, 72, 153, 0.55) !important; }
+html.theme-light .border-amber-500\/40   { border-color: rgba(245, 158, 11, 0.55) !important; }
+html.theme-light .border-blue-500\/40    { border-color: rgba(59, 130, 246, 0.55) !important; }
+html.theme-light .border-fuchsia-500\/30,
+html.theme-light .border-fuchsia-500\/60 { border-color: rgba(217, 70, 239, 0.55) !important; }
+html.theme-light .border-violet-500\/30  { border-color: rgba(139, 92, 246, 0.55) !important; }
+
+/* Missing border overrides for /30 opacity variants. */
+html.theme-light .border-blue-500\/30   { border-color: rgba(59, 130, 246, 0.40) !important; }
+html.theme-light .border-cyan-500\/40   { border-color: rgba(6, 182, 212, 0.55) !important; }
+
+/* Status code pills — the small badge that holds the course code. The
+   `bg-XXX-500/20` is darker than the card bg, so it should stay
+   readable on its own. The accompanying `text-XXX-300` is already
+   flipped to 700 by the rules above. No extra work needed. */
+
+/* Hover backgrounds — used by the header buttons. */
+html.theme-light .hover\:bg-white\/5:hover    { background-color: var(--theme-hover-soft) !important; }
+html.theme-light .hover\:bg-white\/10:hover   { background-color: var(--theme-hover) !important; }
+html.theme-light .hover\:bg-white\/15:hover   { background-color: rgba(15, 23, 42, 0.1) !important; }
+html.theme-light .hover\:bg-slate-900:hover   { background-color: var(--theme-surface) !important; }
+
+/* Focus rings stay the same — they're already colour-coded (blue-500). */
+/* Scrollbars adapt slightly so they don't look like white stripes on a
+   light background. */
+html.theme-light ::-webkit-scrollbar-thumb { background-color: rgba(15, 23, 42, 0.2) !important; }
+html.theme-light ::-webkit-scrollbar-track { background-color: transparent !important; }
+
+/* A few component-specific tweaks. The AdvisingPanel error banner keeps
+   its rose tint in both themes (it's a warning). The PrereqMapScreen
+   dotted background flips from light-grey dots on dark to slate dots on
+   light — but a uniform subtle background works in both, so we leave
+   the existing pattern alone. */
+
+/* Print trees: the registration form has its own .print-page.reg-page
+   styling and doesn't need a theme override (it always prints light).
+   The PrereqMapPrint tree reads `.pmaps-page-light` directly via a class
+   set by the new theme-aware prop, so no global override is needed. */

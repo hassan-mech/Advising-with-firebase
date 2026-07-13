@@ -1,0 +1,76 @@
+rules_version = '2';
+
+/**
+ * Security model:
+ *  - users/{uid}         — a user's own profile (email, displayName, role).
+ *      - Anyone signed in can read their own profile; a "master" can
+ *        read every profile (needed to list advisors on the dashboard).
+ *      - A user can update their own doc but never their own "role".
+ *      - A "master" CAN change another user's "role" (promote/demote
+ *        from the dashboard) but that update must touch the "role"
+ *        field only — it can't be used to rewrite someone's email etc.
+ *      - A master can never change their own role through this path
+ *        (enforced client-side too) — self-demotion is a console job.
+ *  - students/{studentId} — one doc per student.
+ *      - advisorId field marks the owning advisor.
+ *      - An "advisor" can create/read/update only their own students
+ *        (advisorId == their uid). They cannot delete.
+ *      - A "master" can read, create, update, AND delete every
+ *        student — this is what powers the dashboard's reassign/edit/
+ *        delete actions across every advisor's roster.
+ *  - shared/{docId}       — shared reference data (course catalog,
+ *                          master schedule). Any signed-in user can
+ *                          read and write (tighten to master-only if
+ *                          you want these centrally managed).
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isMaster() {
+      return signedIn() && role() == 'master';
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isMaster());
+      // First-time profile creation (AuthContext.ensureProfile) — only
+      // the user themself, and only with role "advisor". Role changes
+      // after that must be done by a master (dashboard) or by hand.
+      allow create: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.role == 'advisor';
+      allow update: if signedIn() && (
+        // Self-update: any field except "role".
+        (request.auth.uid == uid && request.resource.data.role == resource.data.role) ||
+        // Master promoting/demoting someone else: "role" is the ONLY
+        // field allowed to change, and never on their own doc.
+        (isMaster() && request.auth.uid != uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role']))
+      );
+    }
+
+    match /students/{studentId} {
+      allow read: if signedIn() &&
+        (isMaster() || resource.data.advisorId == request.auth.uid);
+      allow create: if signedIn() &&
+        (isMaster() || request.resource.data.advisorId == request.auth.uid);
+      allow update: if signedIn() && (
+        isMaster() ||
+        (resource.data.advisorId == request.auth.uid &&
+         request.resource.data.advisorId == request.auth.uid)
+      );
+      allow delete: if signedIn() && isMaster();
+    }
+
+    match /shared/{docId} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+  }
+}

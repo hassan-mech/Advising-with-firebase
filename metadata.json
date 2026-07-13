@@ -1,0 +1,6 @@
+{
+  "name": "Academic Planner",
+  "description": "An interactive, visually spectacular multi-screen academic course planner with prerequisite maps, curriculum lists, and semester validation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

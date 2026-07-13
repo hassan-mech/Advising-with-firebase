@@ -1,0 +1,1250 @@
+/**
+ * Print stylesheet.
+ *
+ * Exactly one print tree is in the DOM at any time (driven by
+ * Shell's `activeTree` state). On `@media print` we:
+ *   1. Hide everything that isn't tagged with `data-print`.
+ *   2. Force each `[data-print-page]` onto its own page.
+ *
+ * Tailwind's `dark:` variants don't help in print — we hand-roll
+ * rules in plain CSS so we don't depend on the screen palette.
+ *
+ * Layouts:
+ *   - `.print-page`           — prereq map (one page per student)
+ *   - `.print-page`           — failure report
+ *   - `.print-page.reg-page`  — NMU registration form
+ */
+
+@media print {
+  /* --- Reset the page --- */
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  @page :first {
+    margin: 12mm;
+  }
+
+  html, body {
+    background: white !important;
+    color: black !important;
+    /* Preserve background colours and SVG fills when the user
+       toggles "Background graphics" off in the print dialog. We
+       rely on coloured backgrounds for the dark-theme prereq map
+       and the red-bordered registration form — without this, Chrome
+       prints the dark cards as white boxes and the prereq map
+       becomes unreadable. */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide everything except the active print tree. We use `display: none`
+     rather than `visibility: hidden` because Chrome's print-to-PDF
+     pipeline rasterises the visible region as a bitmap when the page
+     contains a `visibility: hidden` subtree. That makes the exported
+     PDF copy as an image (no selectable text). `display: none`
+     removes the element from the layout tree entirely, so the print
+     backend emits real text glyphs for the print tree — making the
+     PDF copy-friendly for ALL printed content (failure report,
+     prereq map, registration form, plan summary table).
+
+     The selector excludes three things:
+       (a) the print tree itself                — `:not([data-print])`
+       (b) every descendant of the print tree  — `:not([data-print] *)`
+       (c) every ANCESTOR of the print tree    — `:not(:has([data-print]))`
+
+     (c) is critical: the React tree puts `[data-print]` deep inside
+     `<div id="root">` → `<Shell>` → `<main>`. Without (c), the
+     `display: none` rule would hide `#root` (and thus the print
+     tree nested inside it). With (c), every ancestor of the print
+     tree stays visible and only the unrelated siblings (header,
+     main content) are hidden. */
+  body *:not([data-print]):not([data-print] *):not(:has([data-print])) {
+    display: none !important;
+  }
+  /* Pin the print tree to the top-left of the page so it lays out
+     from the page origin (not wherever the React tree inserted it). */
+  [data-print] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block !important;
+  }
+  /* Force-selectable text inside the active print tree. We also
+     explicitly re-allow pointer/text selection on every descendant
+     so a future change that adds `user-select: none` somewhere
+     (e.g. a chip) can't silently kill copy-to-clipboard. */
+  [data-print], [data-print] * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+  }
+  /* Force one page-break between each print block. */
+  [data-print] {
+    page-break-after: always;
+    break-after: page;
+  }
+  [data-print]:last-of-type {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  /* Per-student / per-form pages. */
+  [data-print-page] {
+    page-break-after: always;
+    break-after: page;
+  }
+  [data-print-page]:last-of-type {
+    page-break-after: auto;
+    break-after: auto;
+  }
+}
+
+/* Screen view: print blocks stay hidden. */
+@media screen {
+  [data-print] {
+    display: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared print palette — used by both reports. We define the light-theme
+   colour mapping here so the JSX stays focused on structure.
+   --------------------------------------------------------------------------- */
+
+.print-page {
+  background: white;
+  color: #0f172a; /* slate-900 */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11pt;
+  line-height: 1.4;
+  padding: 8mm;
+  box-sizing: border-box;
+}
+.print-page h1, .print-page h2, .print-page h3 {
+  color: #0f172a;
+  margin: 0 0 4mm 0;
+}
+.print-page h1 { font-size: 18pt; font-weight: 800; }
+.print-page h2 { font-size: 14pt; font-weight: 700; }
+.print-page h3 { font-size: 12pt; font-weight: 700; }
+.print-page .small { font-size: 9pt; color: #475569; }
+.print-page .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+
+/* Status tints — visible on colour printers, distinguishable enough
+   in B/W (saturated enough to look darker in greyscale). */
+.print-page .status-passed      { background: #d1fae5; color: #065f46; border-color: #10b981; }
+.print-page .status-failed      { background: #fecaca; color: #7f1d1d; border-color: #b91c1c; }
+.print-page .status-failed-prereq { background: #fce7f3; color: #9d174d; border-color: #db2777; }
+.print-page .status-blocked     { background: #ccfbf1; color: #0f766e; border-color: #14b8a6; }
+.print-page .status-open        { background: #dbeafe; color: #1e3a8a; border-color: #2563eb; }
+.print-page .status-planned     { background: #fae8ff; color: #86198f; border-color: #c026d3; }
+.print-page .status-in-program  { background: #f1f5f9; color: #334155; border-color: #94a3b8; }
+
+.print-page .grid-header {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 4mm;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 2mm;
+  margin-bottom: 4mm;
+}
+.print-page .grid-header .label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9pt;
+  color: #475569;
+  font-weight: 700;
+}
+.print-page .grid-header .value {
+  font-size: 12pt;
+  font-weight: 700;
+}
+
+.print-page .semester-row {
+  display: grid;
+  grid-template-columns: 28mm 1fr;
+  gap: 4mm;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 2mm 0;
+  page-break-inside: avoid;
+}
+.print-page .semester-row .label {
+  font-weight: 800;
+  font-size: 11pt;
+  color: #0f172a;
+}
+.print-page .semester-row .label .num {
+  font-size: 14pt;
+  display: block;
+}
+.print-page .course-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+}
+.print-page .course-card {
+  border: 1px solid;
+  border-radius: 2mm;
+  padding: 1.5mm 2mm;
+  font-size: 9pt;
+  width: 36mm;
+  box-sizing: border-box;
+  page-break-inside: avoid;
+}
+.print-page .course-card .code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 800;
+  font-size: 9.5pt;
+  display: block;
+}
+.print-page .course-card .title {
+  font-size: 8.5pt;
+  margin: 0.5mm 0;
+  line-height: 1.2;
+}
+.print-page .course-card .meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8pt;
+  color: #334155;
+}
+.print-page .course-card .prereqs {
+  border-top: 1px solid rgba(15, 23, 42, 0.15);
+  margin-top: 1mm;
+  padding-top: 1mm;
+  font-size: 7.5pt;
+  color: #475569;
+}
+.print-page .course-card .prereqs .missing {
+  color: #b91c1c;
+  font-weight: 700;
+}
+.print-page .course-card .prereqs .ok {
+  color: #047857;
+}
+
+.print-page .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+  margin-top: 4mm;
+  padding-top: 2mm;
+  border-top: 1px solid #e2e8f0;
+  font-size: 8.5pt;
+  color: #334155;
+}
+.print-page .legend .swatch {
+  display: inline-block;
+  width: 3mm;
+  height: 3mm;
+  border: 1px solid;
+  border-radius: 1mm;
+  margin-right: 1mm;
+  vertical-align: middle;
+}
+
+/* Failure report layout. */
+.print-page .summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+  margin: 4mm 0;
+}
+.print-page .summary-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 2mm;
+  padding: 3mm;
+}
+.print-page .summary-card .num {
+  font-size: 22pt;
+  font-weight: 800;
+  line-height: 1;
+}
+.print-page .summary-card .label {
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-top: 1mm;
+}
+.print-page .distribution {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm;
+}
+.print-page .leaderboard-row {
+  border: 1px solid #cbd5e1;
+  border-radius: 2mm;
+  padding: 3mm;
+  margin-bottom: 2mm;
+  page-break-inside: avoid;
+}
+.print-page .leaderboard-row .top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2mm;
+  margin-bottom: 2mm;
+}
+.print-page .leaderboard-row .code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 800;
+  font-size: 12pt;
+  color: #0f172a;
+}
+.print-page .leaderboard-row .count {
+  background: #fecaca;
+  color: #7f1d1d;
+  border: 1px solid #b91c1c;
+  border-radius: 2mm;
+  padding: 0.5mm 1.5mm;
+  font-size: 9pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.print-page .leaderboard-row .title {
+  font-size: 10pt;
+  color: #334155;
+  margin-bottom: 1mm;
+}
+.print-page .leaderboard-row .downstream {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 2mm;
+  margin-top: 2mm;
+}
+.print-page .leaderboard-row .downstream h4 {
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin: 0 0 1mm 0;
+}
+.print-page .leaderboard-row .downstream .chip {
+  display: inline-block;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9pt;
+  font-weight: 700;
+  border: 1px solid #cbd5e1;
+  border-radius: 1.5mm;
+  padding: 0.5mm 1.5mm;
+  margin: 0.5mm 1mm 0.5mm 0;
+}
+.print-page .leaderboard-row .student-list {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 2mm;
+  margin-top: 2mm;
+  columns: 3;
+  font-size: 9pt;
+}
+.print-page .leaderboard-row .student-list .item {
+  display: flex;
+  justify-content: space-between;
+  gap: 2mm;
+  padding: 0.4mm 0;
+  break-inside: avoid;
+}
+.print-page .leaderboard-row .student-list .name {
+  color: #0f172a;
+}
+.print-page .leaderboard-row .student-list .id {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: #475569;
+  font-size: 8pt;
+}
+
+/* ---------------------------------------------------------------------------
+   NMU Academic Registration Form layout.
+   Mirrors the office's existing paper form (red banner + Arabic labels +
+   bilingual info table + course table with NEW/Enhancing/Repeated ticks +
+   financial summary + signature rows). Portrait A4.
+   --------------------------------------------------------------------------- */
+
+.print-page.reg-page {
+  padding: 6mm;
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.3;
+  /* RTL Arabic labels need a font that ships Arabic glyphs on every
+     platform. We list a few common fallbacks; the print dialog
+     silently substitutes if none are available. */
+}
+
+.print-page.reg-page .reg-ltr { direction: ltr; text-align: left; }
+.print-page.reg-page .reg-rtl { direction: rtl; text-align: right; }
+.print-page.reg-page .reg-center { text-align: center; }
+.print-page.reg-page .reg-right { text-align: right; }
+.print-page.reg-page .reg-mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+
+/* Top banner — three-column flex (logo / title / faculty). */
+.print-page.reg-page .reg-top-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 3px solid #8b1d2c;
+  padding-bottom: 6px;
+}
+/* Logo cell — holds the inline NMU SVG. Sized to the SVG's 60×60
+   viewBox dimensions; the SVG scales to fit. */
+.print-page.reg-page .reg-logo-cell {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.print-page.reg-page .reg-logo-cell svg {
+  display: block;
+  /* Preserve the gradient fill inside the seal circle even when
+     "Background graphics" is off in the print dialog. */
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+/* University-name cell (left column) — bilingual EN + Arabic lines. */
+.print-page.reg-page .reg-uni-name {
+  font-weight: 800;
+  color: #8b1d2c;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+.print-page.reg-page .reg-uni-name .reg-uni-en { display: block; }
+.print-page.reg-page .reg-uni-name .reg-uni-ar {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0;
+  direction: rtl;
+  text-align: left;
+}
+.print-page.reg-page .reg-logos {
+  font-weight: 800;
+  color: #8b1d2c;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+.print-page.reg-page .reg-titles {
+  text-align: center;
+  flex: 1;
+}
+.print-page.reg-page .reg-titles h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #222;
+  text-decoration: underline;
+}
+.print-page.reg-page .reg-titles h2 {
+  margin: 2px 0 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+/* "Level 1" line under the term name */
+.print-page.reg-page .reg-titles .reg-level {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #222;
+}
+.print-page.reg-page .reg-faculty {
+  font-size: 12px;
+  font-weight: 800;
+  text-align: right;
+  color: #8b1d2c;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+/* Term banner — full-width red ribbon. */
+.print-page.reg-page .reg-term-banner {
+  background: #8b1d2c;
+  color: #fff;
+  text-align: center;
+  font-weight: 800;
+  padding: 6px 4px;
+  margin: 8px 0 8px 0;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+/* Info table — bilingual labels with pink-tinted labels. */
+.print-page.reg-page .reg-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+}
+.print-page.reg-page .reg-info-table td {
+  border: 1px solid #999;
+  padding: 5px 8px;
+}
+.print-page.reg-page .reg-info-table .reg-label {
+  background: #f1d6da;
+  font-weight: 700;
+  width: 12%;
+  font-size: 11px;
+}
+.print-page.reg-page .reg-info-table .reg-value {
+  width: 38%;
+  font-size: 11px;
+}
+
+/* Course table — main feature. */
+.print-page.reg-page .reg-course-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+}
+.print-page.reg-page .reg-course-table th,
+.print-page.reg-page .reg-course-table td {
+  border: 1px solid #999;
+  padding: 3px 5px;
+  text-align: center;
+}
+.print-page.reg-page .reg-course-table th {
+  background: #8b1d2c;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+.print-page.reg-page .reg-course-table td:nth-child(3) {
+  text-align: left;
+}
+.print-page.reg-page .reg-course-table .reg-total-row {
+  font-weight: 800;
+  background: #f7f7f7;
+}
+
+/* Financial summary. */
+.print-page.reg-page .reg-financial-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+  font-size: 10.5px;
+}
+.print-page.reg-page .reg-financial-table th,
+.print-page.reg-page .reg-financial-table td {
+  border: 1px solid #999;
+  padding: 4px 6px;
+}
+.print-page.reg-page .reg-financial-table th {
+  background: #8b1d2c;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+/* Signature rows. */
+.print-page.reg-page .reg-signatures {
+  margin-top: 10px;
+  font-size: 11px;
+}
+.print-page.reg-page .reg-sig-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.print-page.reg-page .reg-sig-row .reg-line {
+  display: inline-block;
+  width: 180px;
+  border-bottom: 1px solid #333;
+  margin-left: 6px;
+}
+.print-page.reg-page .reg-sig-col {
+  flex: 1;
+  text-align: center;
+}
+.print-page.reg-page .reg-sig-name {
+  font-weight: 700;
+  margin-top: 2mm;
+}
+
+/* Academic metrics row — CGPA / Earned Hrs / Earned Points. */
+.print-page.reg-page .reg-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4mm;
+  border: 1px solid #333;
+  border-radius: 2mm;
+  padding: 4mm 6mm;
+  margin: 4mm 0;
+  font-weight: 800;
+  font-size: 12px;
+}
+.print-page.reg-page .reg-metrics-cell {
+  flex: 1;
+  text-align: center;
+}
+
+/* Notes block — Arabic notes line above the signatures. */
+.print-page.reg-page .reg-notes {
+  margin: 6mm 0 4mm 0;
+  font-size: 11px;
+}
+.print-page.reg-page .reg-notes .reg-notes-title {
+  font-weight: 800;
+  text-decoration: underline;
+  margin-bottom: 2mm;
+}
+
+/* Footer — university address on the left, ministry bilingual line on
+   the right. Anchored to the bottom of the page via a top border. */
+.print-page.reg-page .reg-footer {
+  margin-top: 8mm;
+  padding-top: 4mm;
+  border-top: 1px solid #cbd5e1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: #475569;
+}
+.print-page.reg-page .reg-logo-group {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.print-page.reg-page .reg-logo-cell img {
+  display: block;
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+}
+ 
+/* Level box + term ribbon, side by side under the header. Reuses the
+   term banner's red styling for the level box. */
+.print-page.reg-page .reg-level-term-row {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+.print-page.reg-page .reg-level-term-row .reg-term-banner {
+  flex: 1;
+  margin: 0; /* row above already provides the vertical margin */
+}
+.print-page.reg-page .reg-level-box {
+  background: #8b1d2c;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  white-space: nowrap;
+}
+ 
+/* Notes block wrapper — replaces the old financial table + separate
+   .reg-notes block. Bordered box containing the metrics line and the
+   two-column recap table. */
+.print-page.reg-page .reg-notes-block {
+  border: 1px solid #999;
+  padding: 6px 8px;
+  margin: 8px 0;
+}
+.print-page.reg-page .reg-notes-block .reg-notes-title {
+  font-weight: 800;
+  text-decoration: underline;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+ 
+/* Metrics line inside the notes block (CGPA / Earned CHs / Earned
+   Points). Lighter than the old standalone bordered .reg-metrics-row
+   since it now sits inside reg-notes-block's own border. */
+.print-page.reg-page .reg-notes-block .reg-metrics-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  font-weight: 800;
+  font-size: 12px;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #cbd5e1;
+}
+.print-page.reg-page .reg-notes-block .reg-metrics-cell {
+  flex: 1;
+  text-align: center;
+}
+ 
+/* Two-column recap table: courses loaded this term / failed courses. */
+.print-page.reg-page .reg-recap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+}
+.print-page.reg-page .reg-recap-table th,
+.print-page.reg-page .reg-recap-table td {
+  border: 1px solid #999;
+  padding: 3px 6px;
+  text-align: right;
+  vertical-align: top;
+}
+.print-page.reg-page .reg-recap-table th {
+  background: #8b1d2c;
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+
+
+
+/* ---------------------------------------------------------------------------
+   Prereq map print layout — dark theme matching the on-screen site.
+   The on-screen prereq map (PrereqMapScreen) uses slate-950 backgrounds
+   with status-colour-tinted cards. We mirror those exact hex values here
+   so the printed handout reads the same way: dark background, emerald
+   for passed, rose for failed, pink for failed-prereq, amber for
+   blocked, blue for open, fuchsia for planned.
+   --------------------------------------------------------------------------- */
+
+.pmaps-root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.pmaps-page {
+  background: #020617; /* slate-950 */
+  color: #f1f5f9;     /* slate-100 */
+  padding: 8mm;
+  box-sizing: border-box;
+  font-size: 10pt;
+  line-height: 1.35;
+}
+
+/* Light-theme variant — same layout, but the page background and base text
+   flip. Status card colours (set inline on the card itself via the JSX
+   palette) keep their original tints; only the page chrome changes. */
+.pmaps-page-light {
+  background: #f8fafc; /* slate-50 */
+  color: #0f172a;     /* slate-900 */
+  padding: 8mm;
+  box-sizing: border-box;
+  font-size: 10pt;
+  line-height: 1.35;
+  /* Light-mode cards are the "official" handout the office hands out
+     (B/W-friendly); the user explicitly asked for bolder text here so
+     the colour-coded statuses are unmistakable on a printout. */
+  font-weight: 700;
+}
+
+/* Header — same grid layout as the on-screen "grid-header" block. */
+.pmaps-header {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 4mm;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  padding-bottom: 2mm;
+  margin-bottom: 4mm;
+}
+.pmaps-page-light .pmaps-header {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.15);
+}
+.pmaps-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 8.5pt;
+  color: #64748b; /* slate-500 */
+  font-weight: 700;
+}
+.pmaps-name {
+  font-size: 14pt;
+  font-weight: 800;
+  color: #f8fafc;
+}
+.pmaps-page-light .pmaps-name { color: #0f172a; }
+.pmaps-id {
+  margin-left: 4mm;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 10pt;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.pmaps-page-light .pmaps-id { color: #64748b; }
+.pmaps-major {
+  font-size: 12pt;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.pmaps-page-light .pmaps-major { color: #1e293b; }
+.pmaps-mismatch {
+  margin-left: 3mm;
+  font-size: 9pt;
+  color: #fbbf24; /* amber-400 */
+  font-weight: 600;
+}
+.pmaps-page-light .pmaps-mismatch { color: #b45309; } /* amber-700 */
+.pmaps-summary-line {
+  font-size: 10pt;
+  color: #cbd5e1;
+}
+.pmaps-page-light .pmaps-summary-line { color: #475569; }
+
+/* Semester row — on-screen has a pinned "Semester N" label on the left
+   and a horizontal flow of course cards on the right. */
+.pmaps-semester {
+  display: grid;
+  grid-template-columns: 28mm 1fr;
+  gap: 4mm;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2mm 0;
+  page-break-inside: avoid;
+}
+.pmaps-page-light .pmaps-semester {
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+}
+.pmaps-sem-label {
+  font-weight: 800;
+  font-size: 10pt;
+  color: #f1f5f9;
+  text-align: right;
+  padding-right: 2mm;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.pmaps-page-light .pmaps-sem-label {
+  color: #0f172a;
+  border-right: 1px solid rgba(15, 23, 42, 0.12);
+}
+.pmaps-sem-num {
+  font-size: 14pt;
+  display: block;
+  color: #ffffff;
+}
+.pmaps-page-light .pmaps-sem-num { color: #0f172a; }
+.pmaps-sem-body {
+  min-width: 0;
+}
+.pmaps-sem-empty {
+  font-size: 9pt;
+  color: #475569;
+  font-style: italic;
+  padding: 2mm;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 2mm;
+  text-align: center;
+}
+.pmaps-page-light .pmaps-sem-empty {
+  border: 1px dashed rgba(15, 23, 42, 0.15);
+  color: #64748b;
+}
+
+/* Card grid — wrap to multiple lines inside the same semester if
+   there are more courses than fit in one row. */
+.pmaps-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2mm;
+}
+
+.pmaps-card {
+  border: 1px solid;
+  border-radius: 3mm;
+  padding: 1.5mm 2mm;
+  width: 44mm;
+  box-sizing: border-box;
+  page-break-inside: avoid;
+  /* Default colours are overridden by inline style for status-specific
+     backgrounds. The text colour here is just a sensible slate-100 so
+     cards without an inline override don't render black-on-black. */
+  color: #f1f5f9;
+}
+.pmaps-page-light .pmaps-card { color: #0f172a; }
+
+.pmaps-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5mm;
+}
+
+.pmaps-code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 800;
+  font-size: 9.5pt;
+  /* Background pill around the code, matching the on-screen badge. */
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.5mm 1.5mm;
+  border-radius: 1.5mm;
+  border: 1px solid;
+}
+.pmaps-page-light .pmaps-code {
+  background: rgba(241, 245, 249, 0.85);
+}
+.pmaps-card-icon {
+  width: 4mm;
+  height: 4mm;
+  flex-shrink: 0;
+}
+
+.pmaps-title {
+  font-size: 8.5pt;
+  margin: 1mm 0;
+  line-height: 1.2;
+  color: #e2e8f0;
+  /* Truncate to ~3 lines so the card stays compact. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pmaps-page-light .pmaps-title { color: #1e293b; }
+.pmaps-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 8pt;
+  color: #94a3b8;
+  margin-top: 1mm;
+}
+.pmaps-page-light .pmaps-meta { color: #64748b; }
+.pmaps-credits {
+  color: #64748b;
+}
+.pmaps-status-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  font-size: 7.5pt;
+}
+
+/* Grade / GPA row — sits below the meta row on each card. Shows the
+   letter grade the student earned in THIS specific course (or the
+   student's overall GPA when the course has never been attempted).
+   Colour stays status-driven so a failing grade shows rose and a
+   passing grade shows emerald, on both light and dark themes. */
+.pmaps-grade-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 1mm;
+  padding-top: 1mm;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8pt;
+}
+.pmaps-page-light .pmaps-grade-row {
+  border-top: 1px solid rgba(15, 23, 42, 0.1);
+}
+.pmaps-grade-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: 7pt;
+  color: #64748b;
+}
+.pmaps-page-light .pmaps-grade-label {
+  color: #475569;
+}
+.pmaps-grade-value {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 800;
+  font-size: 8.5pt;
+}
+
+/* Prereq chips at the bottom of the card. */
+.pmaps-prereqs {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin-top: 1.5mm;
+  padding-top: 1.5mm;
+  font-size: 7.5pt;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: #94a3b8;
+}
+.pmaps-page-light .pmaps-prereqs {
+  border-top: 1px solid rgba(15, 23, 42, 0.12);
+  color: #64748b;
+}
+.pmaps-prereqs-label {
+  color: #64748b;
+  font-style: italic;
+  margin-right: 1mm;
+}
+.pmaps-prereq-pill {
+  /* colour set inline based on status */
+}
+.pmaps-prereq-sep {
+  color: #475569;
+}
+.pmaps-page-light .pmaps-prereq-sep { color: #94a3b8; }
+
+/* ---------------------------------------------------------------------------
+   Plan-impact stat strip — two cards side-by-side summarising the
+   active student (rolled-up metrics + plan-classification credit
+   totals + Expected GPA). Inline style on the card sets the theme
+   palette; CSS only owns the layout.
+   --------------------------------------------------------------------------- */
+.pmaps-stat-strip {
+  display: flex;
+  gap: 3mm;
+  margin-bottom: 3mm;
+  page-break-inside: avoid;
+}
+.pmaps-stat-card {
+  flex: 1;
+  border: 1px solid;
+  border-radius: 2mm;
+  padding: 3mm 4mm;
+  /* theme-driven background + border via inline style */
+}
+.pmaps-stat-title {
+  font-size: 9pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  margin-bottom: 2mm;
+}
+.pmaps-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 9.5pt;
+  padding: 0.5mm 0;
+}
+.pmaps-stat-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  font-size: 8pt;
+  color: #64748b;
+}
+.pmaps-page-light .pmaps-stat-label { color: #475569; }
+.pmaps-stat-value-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1.5mm;
+}
+.pmaps-stat-hint {
+  font-size: 7.5pt;
+  color: #64748b;
+}
+.pmaps-page-light .pmaps-stat-hint { color: #475569; }
+.pmaps-stat-value {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-weight: 800;
+  font-size: 11pt;
+}
+
+/* Legend strip at the bottom of every page. */
+.pmaps-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3mm;
+  margin-top: 4mm;
+  padding-top: 2mm;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8.5pt;
+  color: #cbd5e1;
+  page-break-inside: avoid;
+}
+.pmaps-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5mm;
+}
+.pmaps-page-light .pmaps-legend { color: #475569; }
+.pmaps-legend-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 5mm;
+  height: 5mm;
+  border: 1px solid;
+  border-radius: 1.5mm;
+  /* border + bg set inline per status */
+}
+.pmaps-legend-icon {
+  width: 3.2mm;
+  height: 3.2mm;
+}
+.pmaps-legend-label {
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+   Tabular sections — added in v2.
+
+   Two new print-trees lean on real <table> elements instead of flex /
+   grid layouts so users can drag-select the text and copy it into a
+   spreadsheet. The classes used are:
+
+     .preport-student-table  — per-course (ID, Student Name) table on
+                               the Failure Report print tree.
+     .preport-plan-table     — single roll-up (ID, Name, Major, GPA,
+                               …, Expected GPA, New Total Hours) on
+                               the new Plan Summary print tree.
+
+   Plain ink (slate-700 borders, slate-200 header fill) so they print
+   legibly on B/W printers and so the dragged selection doesn't pick
+   up weird coloured background runs in the clipboard payload.
+   --------------------------------------------------------------------------- */
+
+.print-page .preport-course-block {
+  page-break-inside: avoid;
+  margin-bottom: 4mm;
+}
+
+.print-page .preport-course-heading {
+  font-weight: 800;
+  font-size: 11pt;
+  margin: 2mm 0 1mm 0;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 1mm;
+  /* course code + (optional) title — sit beside a "N students" chip */
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  justify-content: space-between;
+}
+.print-page .preport-course-heading .code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+.print-page .preport-course-heading .title {
+  font-weight: 600;
+  color: #475569;
+}
+.print-page .preport-course-heading .count {
+  font-size: 9pt;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.print-page .preport-student-table,
+.print-page .preport-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2mm 0 4mm 0;
+  font-size: 10pt;
+  /* Used by both the per-course table and the plan summary table.
+     Cell-level borders give the user clear visual columns when
+     they're scanning the page, and `page-break-inside: avoid` on the
+     table itself keeps a row from splitting across pages. */
+  page-break-inside: avoid;
+}
+
+.print-page .preport-student-table th,
+.print-page .preport-student-table td,
+.print-page .preport-plan-table th,
+.print-page .preport-plan-table td {
+  border: 1px solid #cbd5e1;
+  padding: 1.5mm 2mm;
+  text-align: left;
+  /* selectable, no background-clip shenanigans; when the user
+     drags across the table they get the raw text */
+  background: transparent;
+}
+
+.print-page .preport-student-table thead th,
+.print-page .preport-plan-table thead th {
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 9.5pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.print-page .preport-student-table .id,
+.print-page .preport-plan-table .mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9.5pt;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.print-page .preport-plan-table th.num,
+.print-page .preport-plan-table td.num {
+  text-align: right;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9.5pt;
+}
+
+.print-page .preport-plan-table tfoot td {
+  font-weight: 800;
+  background: #f1f5f9;
+  border-top: 2px solid #0f172a;
+}
+
+.print-page .preport-table-empty {
+  font-size: 9.5pt;
+  color: #475569;
+  font-style: italic;
+  padding: 4mm;
+  text-align: center;
+  border: 1px dashed #cbd5e1;
+  border-radius: 2mm;
+}
+
+/* ---------------------------------------------------------------------------
+   All-students roll-up table — added in v2.
+
+   Same ink-and-paper palette as the per-course table above. The
+   `failed-cell` column lists one failed course per line so a student
+   with 4 failures stays readable instead of running off the page.
+   --------------------------------------------------------------------------- */
+
+.print-page .preport-all-students-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2mm 0 4mm 0;
+  font-size: 10pt;
+  page-break-inside: auto;
+}
+
+.print-page .preport-all-students-table th,
+.print-page .preport-all-students-table td {
+  border: 1px solid #cbd5e1;
+  padding: 1.5mm 2mm;
+  text-align: left;
+  vertical-align: top;
+  background: transparent;
+}
+
+.print-page .preport-all-students-table thead th {
+  background: #e2e8f0;
+  color: #0f172a;
+  font-size: 9.5pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.print-page .preport-all-students-table .mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9.5pt;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.print-page .preport-all-students-table th.num,
+.print-page .preport-all-students-table td.num {
+  text-align: right;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 9.5pt;
+}
+
+/* Stacked failed-course list inside the Failed Courses cell. One
+   failed course per line keeps the cell scannable when the student
+   has 4–5 failures; each line is its own block so the printed page
+   doesn't truncate them. */
+.print-page .preport-all-students-table .failed-cell {
+  /* nothing custom — inherit left alignment from the table cells */
+}
+
+.print-page .preport-all-students-table .failed-line {
+  /* each failed course on its own line */
+  line-height: 1.35;
+}
+
+.print-page .preport-all-students-table .failed-line + .failed-line {
+  /* a touch of vertical separation between adjacent failed courses
+     so two short codes don't visually merge */
+  margin-top: 0.5mm;
+}
+
+.print-page .preport-all-students-table .muted {
+  color: #94a3b8;
+  font-style: italic;
+}
